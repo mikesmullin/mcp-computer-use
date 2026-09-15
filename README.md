@@ -21,6 +21,7 @@ Typing uses `xdotool type` (XTEST), the same injection path as
 | `window_resize` | width/height |
 | `window_fullscreen` | `on` true/false or toggle |
 | `window_screenshot` | image of that X window |
+| `cursor_position` | current pointer x,y (global) + window under cursor |
 | `window_type` | type text (max 4000 chars) |
 | `window_click` | click x,y relative to the window |
 

@@ -160,6 +160,21 @@ tools =
       result = await x11.typeText w.windowId, args.text, delayMs: args.delayMs
       textResult "typed #{result.chars} chars into #{w.class} id=#{w.windowId} title=#{JSON.stringify w.title}"
 
+  cursor_position:
+    description: 'Read the current mouse cursor in global screen coordinates (same system as window_list). ' +
+      'Does not move the pointer. Use when the operator is pointing at something: call this, then click/screenshot that x,y. ' +
+      'Also returns the X11 window under the cursor (id, class, title) when available.'
+    inputSchema:
+      type: 'object'
+      properties: {}
+    handler: ->
+      pos = await x11.cursorPosition()
+      screens = await awesome.screens()
+      monitor = screens.find (s) -> pos.x >= s.x and pos.y >= s.y and pos.x < s.x + s.width and pos.y < s.y + s.height
+      rel = if monitor then " awesome-screen=#{monitor.index} local=#{pos.x - monitor.x},#{pos.y - monitor.y}" else ''
+      win = if pos.windowId then " window=#{pos.windowId} class=#{pos.windowClass or '?'} title=#{JSON.stringify pos.windowName}" else ''
+      textResult "cursor x=#{pos.x} y=#{pos.y} x11-screen=#{pos.screen}#{rel}#{win}"
+
   window_click:
     description: 'Left/middle/right click at x,y relative to the window top-left (window coordinates, not a CSS selector). Focuses the window first.'
     inputSchema:
