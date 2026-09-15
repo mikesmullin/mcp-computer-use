@@ -1,0 +1,14 @@
+{
+  "name": "@mikesmullin/mcp-computer-use",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "MCP computer-use: AwesomeWM windows, screenshot, type, click",
+  "license": "MIT",
+  "bin": {
+    "mcp-computer-use": "./server.coffee"
+  },
+  "dependencies": {
+    "bun-coffeescript": "^1.0.3"
+  }
+}
