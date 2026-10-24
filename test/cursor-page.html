@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>Agent cursor test: 0 clicks</title>
+<style>body{font:24px sans-serif;background:#fafafa;color:#182235;padding:40px}button,input{font:inherit;padding:24px;margin:20px}#log{white-space:pre-wrap}</style>
+<h1>Agent cursor test</h1>
+<p>This local page records test input only.</p>
+<button id="target">Click count: 0</button><input placeholder="Type here" aria-label="Test input">
+<pre id="log"></pre>
+<script>
+let count=0; const log=document.querySelector('#log');
+document.querySelector('input').addEventListener('input',e=>{document.title='Agent cursor test: '+count+' clicks | input='+e.target.value;});
+target.onclick=e=>{count++;target.textContent='Click count: '+count;document.title='Agent cursor test: '+count+' clicks';};
+for(const type of ['mousedown','mouseup','click','contextmenu','input'])document.addEventListener(type,e=>{if(type==='contextmenu')e.preventDefault();log.textContent=JSON.stringify({type,x:e.clientX,y:e.clientY,button:e.button,trusted:e.isTrusted,value:e.target.value})+'\n'+log.textContent.slice(0,1500);});
+</script>

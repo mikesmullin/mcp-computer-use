@@ -1,3 +1,4 @@
+import { validate } from '../lib/schema.mjs';
 /**
  * Minimal newline-delimited JSON-RPC MCP host kit (stdio).
  * Enough for tools/list + tools/call; not a full MCP implementation.
@@ -27,6 +28,7 @@ export async function runMcpStdioServer(options) {
 
   let buffer = '';
   let closed = false;
+  let queue = Promise.resolve();
 
   const write = (msg) => {
     if (closed) return;
@@ -53,6 +55,7 @@ export async function runMcpStdioServer(options) {
           protocolVersion: params?.protocolVersion || '2024-11-05',
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name, version },
+          ...(options.instructions ? { instructions: options.instructions } : {}),
         });
         return;
       }
@@ -76,6 +79,7 @@ export async function runMcpStdioServer(options) {
           return;
         }
         try {
+          validate(def.inputSchema, args);
           const result = await def.handler(args);
           if (result && Array.isArray(result.content)) {
             respond(id, result);
@@ -117,17 +121,15 @@ export async function runMcpStdioServer(options) {
         process.stderr.write(`mcp-stdio parse error: ${err.message}\n`);
         continue;
       }
-      handleMessage(msg);
+      // Queue before any handler/window-selection await. Dependent calls cannot overtake.
+      queue = queue.then(() => handleMessage(msg));
     }
   });
 
-  process.stdin.on('end', () => {
-    closed = true;
-  });
-
-  // Keep alive until stdin closes
+  // Finish accepted calls before shutting down the overlay or closing responses.
   await new Promise((resolve) => {
-    process.stdin.on('end', resolve);
-    process.stdin.on('close', resolve);
+    const finish = () => { queue.finally(() => { closed = true; resolve(); }); };
+    process.stdin.once('end', finish);
+    process.stdin.once('close', finish);
   });
 }

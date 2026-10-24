@@ -1,0 +1,9 @@
+[package]
+name = "cua-overlay"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+x11rb = { version = "0.13.2", features = ["shape", "xtest", "xinput"] }
+libc = "0.2"
