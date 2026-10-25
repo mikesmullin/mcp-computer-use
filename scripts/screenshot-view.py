@@ -17,14 +17,17 @@ scale = min(1.0, o['maxWidth']/w)
 size = (max(1, round(w*scale)), max(1, round(h*scale)))
 if im.size != size:
     im = im.resize(size, Image.Resampling.LANCZOS)
-if o['grid']:
+spacing = o['grid']
+if type(spacing) is not int or spacing < 0 or spacing > 10000:
+    raise ValueError('grid must be an integer pixel spacing from 0 to 10000')
+if spacing:
     grid = Image.new('RGBA', im.size)
     draw = ImageDraw.Draw(grid)
     font = ImageFont.load_default(size=12)
-    for x in range(0, im.width, 100):
+    for x in range(0, im.width, spacing):
         draw.line((x, 0, x, im.height), fill=(255, 255, 255, 80))
         draw.text((x+2, 2), str(x), font=font, fill='white', stroke_width=2, stroke_fill='black')
-    for y in range(100, im.height, 100):
+    for y in range(spacing, im.height, spacing):
         draw.line((0, y, im.width, y), fill=(255, 255, 255, 80))
         draw.text((2, y+2), str(y), font=font, fill='white', stroke_width=2, stroke_fill='black')
     im = Image.alpha_composite(im.convert('RGBA'), grid).convert('RGB')

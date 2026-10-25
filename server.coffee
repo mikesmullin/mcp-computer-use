@@ -3,15 +3,18 @@
 import { runMcpStdioServer, textResult } from './shared/mcp-stdio.mjs'
 import { createAwesome } from './lib/awesome.mjs'
 import { createAgentX11 } from './lib/agent-x11.mjs'
+import { createOcr } from './lib/ocr.mjs'
 import { createInteraction, instructions } from './lib/interaction.mjs'
 
 awesome = createAwesome()
 x11 = createAgentX11()
-interaction = createInteraction { x11, awesome }
+ocr = createOcr()
+interaction = createInteraction { x11, awesome, ocr }
 shuttingDown = false
 shutdown = ->
   return if shuttingDown
   shuttingDown = true
+  await ocr.stop()
   await x11.stop()
 process.once 'SIGTERM', -> shutdown().finally -> process.exit 0
 process.once 'SIGINT', -> shutdown().finally -> process.exit 0
@@ -54,6 +57,7 @@ actionProps =
   screenshotId: snapshotProp
   waitMs: { type: 'integer', minimum: 0, maximum: 2000, default: 300, description: 'Pause before observing; does not guarantee the app finished rendering.' }
 clickProps =
+  targetId: { type: 'string', minLength: 1, maxLength: 32, description: 'Region ID from window_screenshot(transcribe=true), paired with its screenshotId. Use instead of x,y.' }
   x: pixelProp
   y: pixelProp
   button: { type: 'integer', enum: [1, 2, 3], default: 1 }
@@ -160,7 +164,7 @@ tools =
       textResult "fullscreen=#{after.fullscreen}. #{fmtWindow after}"
 
   window_screenshot:
-    description: 'Observe a window. Returns screenshotId and an image; action x,y are pixels in THAT image, with NO offsets. To zoom, pass screenshotId and crop in that image pixels. grid=true labels every 100 pixels. Does not move/resize the window.'
+    description: 'Observe a window. Returns screenshotId and an image; action x,y are pixels in THAT image, with NO offsets. To zoom, pass screenshotId and crop in that image pixels. grid=N draws labeled major lines every N output pixels; 0 disables. transcribe=true returns OCR text and targetIds INSTEAD OF the image. Grid is not drawn for OCR. Does not move/resize the window.'
     inputSchema: schema Object.assign({}, selectorProps,
       screenshotId: snapshotProp
       crop:
@@ -173,22 +177,24 @@ tools =
           width: { type: 'integer', minimum: 1 }
           height: { type: 'integer', minimum: 1 }
       maxWidth: { type: 'integer', minimum: 320, maximum: 2000, default: 1280 }
-      grid: { type: 'boolean', default: false }
+      grid: { type: 'integer', minimum: 0, maximum: 10000, default: 0, description: 'Major grid spacing in output-image pixels; 0 disables. Ignored while transcribe=true.' }
+      transcribe: { type: 'boolean', default: false, description: 'Return OCR text and targetIds instead of image pixels. OCR runs on the native crop before scaling/grid.' }
+      query: { type: 'string', maxLength: 100, description: 'Optional OCR text filter; requires transcribe=true.' }
     )
     handler: (args = {}) -> interaction.screenshot args
 
   window_type:
-    description: 'Send literal text to the currently focused control in the screenshot window. Does not locate or focus a text field. Prefer window_interact to click a field and type in order. Returns a fresh screenshot; verify the text appeared.'
+    description: 'Send literal text to the currently focused control in the screenshot window. Does not locate or focus a text field. Prefer window_interact to click a field and type in order. Returns a fresh observation (OCR text after window_screenshot(transcribe=true)); verify the text appeared.'
     inputSchema: schema Object.assign({}, actionProps, textProps), ['screenshotId', 'text']
     handler: (args = {}) -> interaction.action 'type', args
 
   window_key:
-    description: 'Send one shortcut to the screenshot window and return a fresh screenshot. Examples: Ctrl+t (new tab), Ctrl+l (address bar), Enter, Tab, Escape, Ctrl+a. Use the new screenshotId for the next call.'
+    description: 'Send one shortcut to the screenshot window and return a fresh observation (OCR text after window_screenshot(transcribe=true)). Examples: Ctrl+t (new tab), Ctrl+l (address bar), Enter, Tab, Escape, Ctrl+a. Use the new screenshotId for the next call.'
     inputSchema: schema Object.assign({}, actionProps, keys: keyProp), ['screenshotId', 'keys']
     handler: (args = {}) -> interaction.action 'key', args
 
   window_interact:
-    description: 'Ordered interaction: optional click at screenshot IMAGE x,y, then optional text (replace=true selects existing text), then optional shortcut, then fresh screenshot. Use for click-and-type. Input delivery is not proof of app success. Never batch a separate click and type in parallel.'
+    description: 'Ordered interaction: optional click using window_screenshot(transcribe=true) targetId OR screenshot IMAGE x,y, then optional text (replace=true selects existing text), then optional shortcut, then fresh observation. Use for click-and-type. Input delivery is not proof of app success. Never batch a separate click and type in parallel.'
     inputSchema: schema Object.assign({}, actionProps, clickProps, textProps, keys: keyProp), ['screenshotId']
     handler: (args = {}) -> interaction.action 'interact', args
 
@@ -208,8 +214,8 @@ tools =
       textResult "cursor x=#{pos.x} y=#{pos.y} x11-screen=#{pos.screen}#{rel}#{win}"
 
   window_click:
-    description: 'Click the CENTER of a target in a returned screenshot. Pass its screenshotId and x,y in IMAGE pixels; do not subtract browser/title-bar offsets or add desktop coordinates. Returns a fresh screenshot. After a miss, inspect a crop/grid before retrying.'
-    inputSchema: schema Object.assign({}, actionProps, clickProps), ['screenshotId', 'x', 'y']
+    description: 'Click an OCR targetId from window_screenshot(transcribe=true), or the CENTER of a target in a returned screenshot. Pass its screenshotId and x,y in IMAGE pixels; do not subtract browser/title-bar offsets or add desktop coordinates. Returns a fresh observation (OCR text after window_screenshot(transcribe=true)). After a miss, inspect a crop/grid before retrying.'
+    inputSchema: schema Object.assign({}, actionProps, clickProps), ['screenshotId']
     handler: (args = {}) -> interaction.action 'click', args
 
 # All exposed schemas reject unknown arguments; dispatch also validates at runtime.
@@ -218,7 +224,7 @@ for name, definition of tools
 
 await runMcpStdioServer
   name: 'computer-use'
-  version: '0.2.0'
+  version: '0.3.0'
   instructions: instructions
   tools: tools
 

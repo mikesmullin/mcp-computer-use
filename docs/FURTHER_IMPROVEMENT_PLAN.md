@@ -257,3 +257,11 @@ Ship one stage at a time with the baseline available as a fallback. Document set
 new tool schemas, supported apps, capability failures, and changed skill guidance.
 Have the user test in the same Pi/model harness and report results before advancing
 from C to D. Do not treat this roadmap as a request to implement all stages at once.
+
+## Research: local GUI grounding and OCR-with-boxes
+
+See [local-gui-grounding-research.md](local-gui-grounding-research.md) for the 2026
+research notes behind the OCR candidate-list + Set-of-Mark approach, model
+options (PaddleOCR, Tesseract, BrowserVLM, UI-TARS, MolmoPoint), and caveats
+including unverified claims and the note that Zen's AT-SPI tree may provide
+exact boxes without any model.

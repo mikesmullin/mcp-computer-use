@@ -72,6 +72,34 @@ fn check(idle: &str, fade: bool) {
             .is_empty(),
         fade
     );
+    if fade {
+        // Neither screenshots nor typing should resurrect an idle cursor.
+        for command in ["show 100 100", "move 100 100", "typing 1", "typing 0"] {
+            writeln!(child.stdin.as_mut().unwrap(), "{command}").unwrap();
+            line.clear();
+            out.read_line(&mut line).unwrap();
+            assert_eq!(line.trim(), "ok");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(c
+            .shape_get_rectangles(window, SK::BOUNDING)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .rectangles
+            .is_empty());
+        writeln!(child.stdin.as_mut().unwrap(), "move 150 150").unwrap();
+        line.clear();
+        out.read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "ok");
+        assert!(!c
+            .shape_get_rectangles(window, SK::BOUNDING)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .rectangles
+            .is_empty());
+    }
     drop(child.stdin.take());
     assert!(child.wait().unwrap().success());
     assert!(c.get_geometry(window).unwrap().reply().is_err());

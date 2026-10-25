@@ -58,11 +58,13 @@ X server and AwesomeWM. No Codex configuration has been installed by this change
 |---|---|---|
 | `CUA_CURSOR` | `on` | `off` disables drawing, retaining independent input |
 | `CUA_CURSOR_COLOR` | `4F86F7` | Six-digit RGB, optional leading `#` |
-| `CUA_CURSOR_IDLE_MS` | `0` | Zero stays visible; otherwise hide after this idle period |
+| `CUA_CURSOR_IDLE_MS` | `180000` | Hide after three minutes without movement; zero stays visible |
 | `CUA_CURSOR_FADE_MS` | `2500` | Optional coverage fade during the final portion of idle time |
 | `CUA_CURSOR_BINARY` | `overlay/target/release/cua-overlay` | Helper executable override |
 
-Idle/fade values accept 0–60000 ms. Coverage fade is compatible with bare X11.
+Idle/fade environment values accept 0–3600000 ms. Coverage fade is compatible with bare X11.
+Screenshot refreshes, typing, and repeated coordinates do not reset the timer or
+reveal a hidden cursor. Moving to a new position reveals it again.
 The renderer requires no compositor or background sampling. Persistent idle draws
 no new frames unless exposed, but periodically reasserts stacking order.
 

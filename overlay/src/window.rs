@@ -21,8 +21,8 @@ fn env_ms(name: &str, default: u64) -> Result<u64> {
     match std::env::var(name) {
         Ok(v) => {
             let n = v.parse()?;
-            if n > 60000 {
-                return Err(format!("{name} exceeds 60000").into());
+            if n > 3_600_000 {
+                return Err(format!("{name} exceeds 3600000").into());
             }
             Ok(n)
         }
@@ -144,7 +144,7 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
             }
         }
     });
-    let idle = env_ms("CUA_CURSOR_IDLE_MS", 0)?;
+    let idle = env_ms("CUA_CURSOR_IDLE_MS", 180_000)?;
     let mut fade = env_ms("CUA_CURSOR_FADE_MS", 2500)?.min(idle);
     let mut pos: Option<(f64, f64)> = None;
     let mut movement: Option<Motion> = None;
@@ -159,7 +159,8 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
         if STOP.load(Ordering::Relaxed) {
             break;
         }
-        let fading = idle > 0 && last.elapsed().as_millis() as u64 >= idle.saturating_sub(fade);
+        let elapsed = last.elapsed().as_millis() as u64;
+        let fading = idle > 0 && elapsed >= idle.saturating_sub(fade) && elapsed < idle;
         let wait = if movement.is_some() || (pos.is_some() && fading) {
             Duration::from_millis(16)
         } else {
@@ -184,7 +185,6 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
                         )?
                         .check()?;
                         old = None;
-                        last = Instant::now();
                         reply("ok");
                     }
                     Ok(Op::Fade(ms)) => {
@@ -198,6 +198,13 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
                             continue;
                         }
                         let to = (x as f64, y as f64);
+                        // Screenshot refreshes and repeated coordinates are not motion.
+                        // Retain the last position even when hidden so they cannot
+                        // resurrect the cursor or extend its inactivity deadline.
+                        if pos == Some(to) {
+                            reply("ok");
+                            continue;
+                        }
                         let from = pos.unwrap_or(to);
                         let duration = if line.trim_start().starts_with("move") && pos.is_some() {
                             glyph::duration(from, to)
@@ -281,9 +288,6 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
                 c.poly_fill_rectangle(w, dark, &all)?;
                 c.poly_fill_rectangle(w, blue, &fill)?;
                 old = Some(key);
-            }
-            if alpha == 0. {
-                pos = None;
             }
             if raise.elapsed() >= Duration::from_millis(80) || arrived {
                 c.configure_window(w, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE))?;
