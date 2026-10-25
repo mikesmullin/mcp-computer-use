@@ -198,10 +198,10 @@ pub fn serve(c: RustConnection, screen: usize) -> Result<()> {
                             continue;
                         }
                         let to = (x as f64, y as f64);
-                        // Screenshot refreshes and repeated coordinates are not motion.
-                        // Retain the last position even when hidden so they cannot
-                        // resurrect the cursor or extend its inactivity deadline.
-                        if pos == Some(to) {
+                        // Passive screenshot refreshes must not reset idle expiry.
+                        // An explicit move represents a new interaction, even at the
+                        // same endpoint, and must reveal the cursor again.
+                        if pos == Some(to) && !line.trim_start().starts_with("move") {
                             reply("ok");
                             continue;
                         }

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAgentX11 } from '../lib/agent-x11.mjs';
 import { createOverlay } from '../lib/cursor-overlay.mjs';
+import { createCursorProcess } from '../lib/cursor-process.mjs';
 
 test('invalid coordinates never activate or inject', async () => {
  const calls=[];
@@ -22,7 +23,21 @@ test('input helper errors propagate instead of reporting success',async()=>{
  await assert.rejects(x.click(123,{x:1,y:2}),/occluded/);
 });
 test('missing overlay fails open and disabled overlay never starts',async()=>{
- const missing=createOverlay({binary:'/nonexistent/cua-overlay',timeoutMs:100});
+ const missing=createCursorProcess({binary:'/nonexistent/cua-overlay',timeoutMs:100});
  assert.equal(await missing.show(1,2),false);await missing.stop();
  const off=createOverlay({enabled:false});assert.equal(await off.show(1,2),false);assert.equal(off.pid(),undefined);await off.stop();
+});
+
+test('double clicks and wheel ticks use one independent helper invocation, with late validation',async()=>{
+ const calls=[];
+ const x=createAgentX11({binary:'helper',base:{activate:async()=>{}},overlay:{move:async()=>{},stop:async()=>{}},run:async(cmd,args)=>{calls.push(args);return {ok:true,stdout:args[0]==='geometry'?'0 0 800 600':'injected'};}});
+ await x.click(123,{x:5,y:7,count:2,validateTarget:async()=>calls.push(['validated'])});
+ assert.deepEqual(calls.slice(-2),[['validated'],['click','123','5','7','1','2']]);
+ await x.scroll(123,{x:5,y:7,direction:'down',amount:'page'});
+ assert.deepEqual(calls.at(-1),['wheel','123','5','7','5','10']);
+ const count=calls.length;
+ await assert.rejects(x.click(123,{x:5,y:7,count:3}));
+ assert.equal(calls.length,count);
+ await assert.rejects(x.click(123,{x:5,y:7,validateTarget:async()=>{throw Error('moved');}}),/moved/);
+ assert.notEqual(calls.at(-1)[0],'click');
 });

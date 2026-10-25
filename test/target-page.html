@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Computer use target fixture</title>
+<style>body{font:24px sans-serif;background:white;color:black;padding:30px}input,button{font:24px sans-serif;margin:20px;padding:10px}.spacer{height:1800px}</style>
+<h1>Target interface fixture</h1><label>Name <input aria-label="Fixture name" id="name"></label>
+<button onclick="document.querySelector('#status').textContent='Clicked top'">Top button</button>
+<button>Duplicate</button><button>Duplicate</button><button style="display:none">Hidden fixture</button>
+<p id="status">Ready</p><div class="spacer"></div><button id="bottom" onclick="document.querySelector('#status').textContent='Clicked bottom';this.textContent='Bottom confirmed'">Bottom fixture</button>

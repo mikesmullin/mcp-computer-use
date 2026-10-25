@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>Agent cursor notification fixture</title>
+<style>body{font:24px sans-serif;background:#fafafa;color:#222;margin:50px}button,input,select{font:24px sans-serif;padding:16px;margin:24px}#right{margin-left:400px}#count{padding:24px}</style>
+<h1>Shared agent cursor test</h1>
+<button id="left" onclick="record('left')">Cursor left button</button><button id="right" onclick="record('right')">Cursor right button</button>
+<p><label>Fixture text <input id="text" aria-label="Cursor fixture text"></label></p>
+<p><label>Fixture choice <select id="choice" aria-label="Cursor fixture choice" onchange="record('select')"><option value="one">One</option><option value="two">Two</option></select></label></p>
+<p id="count">No clicks yet</p>
+<script>window.events=[];function record(action){events.push({action,at:Date.now()});document.querySelector('#count').textContent=JSON.stringify(events)}</script>

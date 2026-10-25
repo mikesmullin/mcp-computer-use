@@ -74,7 +74,7 @@ fn check(idle: &str, fade: bool) {
     );
     if fade {
         // Neither screenshots nor typing should resurrect an idle cursor.
-        for command in ["show 100 100", "move 100 100", "typing 1", "typing 0"] {
+        for command in ["show 100 100", "typing 1", "typing 0"] {
             writeln!(child.stdin.as_mut().unwrap(), "{command}").unwrap();
             line.clear();
             out.read_line(&mut line).unwrap();
@@ -88,7 +88,7 @@ fn check(idle: &str, fade: bool) {
             .unwrap()
             .rectangles
             .is_empty());
-        writeln!(child.stdin.as_mut().unwrap(), "move 150 150").unwrap();
+        writeln!(child.stdin.as_mut().unwrap(), "move 100 100").unwrap();
         line.clear();
         out.read_line(&mut line).unwrap();
         assert_eq!(line.trim(), "ok");

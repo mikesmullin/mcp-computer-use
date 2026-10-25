@@ -112,9 +112,10 @@ pub fn click(
     x: i16,
     y: i16,
     button: u8,
+    count: u8,
 ) -> Result<()> {
-    if !(1..=3).contains(&button) {
-        return Err("button must be 1, 2, or 3".into());
+    if !(1..=7).contains(&button) || !(1..=12).contains(&count) {
+        return Err("invalid native button or repeat count".into());
     }
     let root = c.setup().roots[screen].root;
     let g = c.get_geometry(w)?.reply()?;
@@ -187,13 +188,18 @@ pub fn click(
     if STOP.load(Ordering::Relaxed) {
         return Err("interrupted before click".into());
     }
-    c.xtest_fake_input(BUTTON_PRESS_EVENT, button, 0, root, 0, 0, 0)?
-        .check()?;
-    sleep(Duration::from_millis(40));
-    // Always release, including when a signal arrived during the press.
-    c.xtest_fake_input(BUTTON_RELEASE_EVENT, button, 0, root, 0, 0, 0)?
-        .check()?;
-    sleep(Duration::from_millis(80));
+    for _ in 0..count {
+        if STOP.load(Ordering::Relaxed) {
+            break;
+        }
+        c.xtest_fake_input(BUTTON_PRESS_EVENT, button, 0, root, 0, 0, 0)?
+            .check()?;
+        sleep(Duration::from_millis(40));
+        // Always release, including when a signal arrived during the press.
+        c.xtest_fake_input(BUTTON_RELEASE_EVENT, button, 0, root, 0, 0, 0)?
+            .check()?;
+        sleep(Duration::from_millis(40));
+    }
     let after = c.xinput_xi_query_pointer(root, human)?.reply()?;
     drop(pair);
     c.get_input_focus()?.reply()?;

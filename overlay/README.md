@@ -24,8 +24,10 @@ X server and AwesomeWM. No Codex configuration has been installed by this change
 
 ## Behavior
 
-- Enabled by default, lazily starts at the first click.
-- Stays visible between moves until the MCP closes. Curved, varied travel with
+- Drawing is provided by the optional shared `agent-cursor.service`; its renderer
+  starts on the first move. See [socket setup/protocol](../docs/AGENT_CURSOR_PROTOCOL.md).
+- Stays visible between moves until idle expiry or service shutdown; MCP disconnects
+  do not stop the shared arrow. Curved, varied travel with
   smooth acceleration/deceleration ends exactly at the action's coordinate.
 - Click waits for the overlay's arrival; overlay startup allows the compositor
   time to display its first frame. Typing preserves the last pointer target and
@@ -35,9 +37,8 @@ X server and AwesomeWM. No Codex configuration has been installed by this change
   background. Frame/shadow hints suppress Picom's rectangular shadow without
   changing the user's compositor configuration.
 - Screenshots crop the root framebuffer, including the real overlay. Coordinates
-  in the MCP image are crop/scale-relative; pass screenshotId with image x,y.
-  The MCP handles conversion to native client coordinates. Metadata includes image
-  size and image-relative agent hotspot. Native helper coordinates remain client-relative.
+  are handled internally. Agents choose observation-scoped targets, never pixels.
+  Native helper coordinates remain client-relative.
 - Screenshot refreshes the last agent position. If that position is outside the
   captured window, the arrow is naturally outside the image too.
 - XTEST input uses a short-lived private master pointer/keyboard pair and the
@@ -46,7 +47,7 @@ X server and AwesomeWM. No Codex configuration has been installed by this change
 - The click helper checks which window is actually under its private pointer
   before pressing; an obscured target fails rather than clicking another app.
 - No fallback ever moves the human pointer. Missing input helper is a tool error;
-  missing/crashed drawing overlay only logs a warning and input continues.
+  missing/crashed drawing service is optional and input continues.
 - Overlay exits on EOF, quit, SIGINT or SIGTERM. A separate watcher removes the
   click's master pair even after SIGKILL. A subsequent click also reaps stale
   pairs whose owner process no longer exists. User input devices are never
@@ -57,14 +58,16 @@ X server and AwesomeWM. No Codex configuration has been installed by this change
 | Variable | Default | Meaning |
 |---|---|---|
 | `CUA_CURSOR` | `on` | `off` disables drawing, retaining independent input |
+| `AGENT_CURSOR_SOCKET` | `$XDG_RUNTIME_DIR/agent-cursor.sock` | Shared notification endpoint |
 | `CUA_CURSOR_COLOR` | `4F86F7` | Six-digit RGB, optional leading `#` |
 | `CUA_CURSOR_IDLE_MS` | `180000` | Hide after three minutes without movement; zero stays visible |
 | `CUA_CURSOR_FADE_MS` | `2500` | Optional coverage fade during the final portion of idle time |
 | `CUA_CURSOR_BINARY` | `overlay/target/release/cua-overlay` | Helper executable override |
 
+Set renderer color/idle/fade/binary variables on the shared service.
 Idle/fade environment values accept 0–3600000 ms. Coverage fade is compatible with bare X11.
-Screenshot refreshes, typing, and repeated coordinates do not reset the timer or
-reveal a hidden cursor. Moving to a new position reveals it again.
+Screenshot refreshes and typing alone do not reset the timer or reveal a hidden
+cursor. An explicit action move reveals it again, including at the same position.
 The renderer requires no compositor or background sampling. Persistent idle draws
 no new frames unless exposed, but periodically reasserts stacking order.
 
@@ -82,8 +85,9 @@ typing 0|1
 quit
 ```
 
-`cua-overlay click WINDOW CLIENT_X CLIENT_Y BUTTON` injects buttons 1–3 using the
-private pointer and reports injection coordinates. It does not activate the window;
+`cua-overlay click WINDOW CLIENT_X CLIENT_Y BUTTON [COUNT]` injects buttons 1–3 using the
+private pointer and reports injection coordinates. `wheel` uses the same private
+pointer for buttons 4–7; repeated events share one input transaction. It does not activate the window;
 the MCP activates it first. `geometry WINDOW` reports the exact client origin/size;
 `capture-geometry WINDOW` additionally requires a fully visible framebuffer rectangle.
 `devices` lists XInput devices for diagnostics. `watch PID` is internal cleanup IPC.
@@ -103,12 +107,24 @@ opt-in scripts require that page active and take the Zen X11 window ID:
 
 ```sh
 CUA_OVERLAY_X=1 bun test/desktop-smoke.mjs WINDOW_ID
-CUA_OVERLAY_X=1 bun test/mcp-smoke.mjs WINDOW_ID
 CUA_OVERLAY_X=1 bun test/lifecycle-smoke.mjs WINDOW_ID
 CUA_OVERLAY_X=1 bun test/motion-demo.mjs WINDOW_ID
 ```
 
-The page-specific click coordinates assume the tested Zen layout (sidebar open,
+For the target-based MCP smoke test, serve `test/` over localhost, open
+`target-page.html` in Zen, and keep the mouse idle during the test:
+
+```sh
+python3 -m http.server 18991 --bind 127.0.0.1 --directory test
+# Open http://127.0.0.1:18991/target-page.html, then in another terminal:
+CUA_OVERLAY_X=1 node test/mcp-smoke.mjs WINDOW_ID
+```
+
+This checks DOM typing, hidden/ambiguous/stale references, automatic offscreen
+reveal and click, crop, double-click, native scroll, full-page capture, H2O scoring,
+and human pointer preservation. It needs the OCR, H2O and mcp-zen services running.
+
+The older native scripts' page-specific click coordinates assume the tested Zen layout (sidebar open,
 normal zoom). Inspect the page before running on a different layout. The MCP smoke
 clears only the page's test input. The lifecycle smoke intentionally kills a test
 helper. Screenshots go to `/tmp/agent-*.png`. `transparency-smoke.mjs` compares a

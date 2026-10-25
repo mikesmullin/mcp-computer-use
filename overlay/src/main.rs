@@ -23,13 +23,14 @@ fn run() -> Result<()> {
     let (c, screen) = x11rb::connect(None).map_err(|e| format!("no X display: {e}"))?;
     match args.get(1).map(String::as_str).unwrap_or("serve") {
         "serve" => window::serve(c, screen),
-        "click" if args.len() == 6 => input::click(
+        "click" | "wheel" if args.len() == 6 || args.len() == 7 => input::click(
             &c,
             screen,
             args[2].parse()?,
             args[3].parse()?,
             args[4].parse()?,
             args[5].parse()?,
+            if args.len() == 7 { args[6].parse()? } else { 1 },
         ),
         "geometry" | "capture-geometry" if args.len() == 3 => {
             let w = args[2].parse()?;

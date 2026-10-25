@@ -1,0 +1,16 @@
+[Unit]
+Description=Shared agent cursor animation (drawing only)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/workspace/mcp-computer-use
+ExecStart=/usr/bin/node /workspace/mcp-computer-use/scripts/agent-cursor.mjs
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+Restart=on-failure
+RestartSec=2
+UMask=0077
+
+[Install]
+WantedBy=default.target

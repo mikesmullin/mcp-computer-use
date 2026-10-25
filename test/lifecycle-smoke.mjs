@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createOverlay, binaryPath } from '../lib/cursor-overlay.mjs';
+import { createCursorProcess as createOverlay, binaryPath } from '../lib/cursor-process.mjs';
 import { createAwesome } from '../lib/awesome.mjs';
 import { runCmd } from '../lib/spawn.mjs';
 if(process.env.CUA_OVERLAY_X!=='1')throw new Error('Set CUA_OVERLAY_X=1');

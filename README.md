@@ -1,170 +1,143 @@
 # mcp-computer-use
 
-CoffeeScript/Bun MCP server for the user's AwesomeWM/X11 desktop. A Rust helper
-provides an independent agent pointer and a persistent, transparent cursor overlay.
-The human mouse pointer stays put. Zen is the tested browser.
+Target-based MCP control of the existing AwesomeWM/X11 desktop and Zen browser.
+Agents choose a numeric target ID or an exact unique label. The server handles
+bounds, browser scrolling, and native input through an independent XInput2 pointer.
+The human pointer stays put; windows are never moved or resized by these tools.
 
 ## Run
 
-Requires Bun, Rust, Python 3 with Pillow, `awesome-client`, `xdotool`, `scrot`, and
-an authorized X11 desktop session with XInput2, XTEST and SHAPE.
+Requires Bun, Rust, `awesome-client`, `xdotool`, `scrot`, and an authorized X11
+session with XInput2, XTEST, and SHAPE.
 
 ```sh
 cd /workspace/mcp-computer-use
-bun install
+npm ci
 cargo build --release --manifest-path overlay/Cargo.toml
 bun server.coffee
 ```
 
-Configure the MCP as stdio, launching `bun server.coffee` with this repository as
-its working directory. Inherit `DISPLAY`, `XAUTHORITY`, and the desktop D-Bus session.
-See [overlay/README.md](overlay/README.md) for native setup and configuration.
+Launch as MCP stdio with this repository as the working directory. Inherit
+`DISPLAY`, `XAUTHORITY`, and `DBUS_SESSION_BUS_ADDRESS` from the desktop session.
+Restart the MCP connection after updates so clients reload its schemas.
 
-## Tools
+Provider configuration:
 
-| Tool | Purpose |
-|---|---|
-| `window_list` | Find windows by class/title; returns window IDs and frame geometry |
-| `window_info` | Inspect a window's title, frame geometry, screen and focus |
-| `window_screenshot` | Return an image, or OCR text with transcribe=true; supports crops and grid spacing |
-| `window_click` | Click an OCR region ID or image x,y using its screenshotId |
-| `window_type` | Send text to the focused control; returns a fresh observation |
-| `window_key` | Send one shortcut such as Ctrl+t, Ctrl+l, Enter, or Escape |
-| `window_interact` | Ordered optional click → replace/type → shortcut → observation |
-| `cursor_position` | Read the human pointer, not the agent cursor |
-| `window_fullscreen` | Set/toggle fullscreen when explicitly requested |
+- `MCP_ZEN_URL`: existing mcp-zen HTTP endpoint, default `http://127.0.0.1:8791/mcp`.
+  Requires its connected permanent Firefox/Zen extension.
+- `VISION_OCR_URL`: operator-managed OCR service, default `http://127.0.0.1:1239`.
+- `MCP_VISION_ENTRY`: mcp-vision stdio entrypoint, default
+  `/workspace/mcp-vision/server.mjs`. Used lazily for descriptions and decisions.
+  Its `VISION_LIQUID_URL`, `VISION_H2O_URL`, and other environment settings inherit.
 
-`window_move` and `window_resize` are commented out and unavailable to agents.
-Unknown arguments are rejected. Requests execute in received order, including
-window selection and observation, so concurrent requests cannot overtake each other.
+No tool starts, stops, switches, or reloads model services. There is no CPU OCR
+fallback. Browser observation can use DOM when OCR is unavailable, or OCR when
+DOM is unavailable, with explicit warnings. If both fail, observation fails.
+Descriptions/decisions report an error when their provider is unavailable.
+See [overlay/README.md](overlay/README.md) for native setup.
 
-## Text-only OCR (API 0.3)
+The blue cursor now uses one optional shared `agent-cursor.service`, also used by
+mcp-zen's DOM interactions. Install/start it with the instructions in
+[AGENT_CURSOR_PROTOCOL.md](docs/AGENT_CURSOR_PROTOCOL.md). Without the listener,
+input still works but there is no arrow animation. Reconnect older computer-use MCP
+processes after upgrading so they stop using per-session private renderers.
 
-`window_screenshot({windowId, transcribe: true})` takes a native-resolution screenshot internally and returns
-**only text**, never an image. Its JSON contains `screenshotId`, `regions` with
-`{targetId, text, location}`, timing, and truncation information. Optional `query`
-filters text case-insensitively. At most 300 regions are returned; recognition
-scores below 0.8 are filtered. Pixel coordinates remain internal. `transcribe` defaults to false (image output).
-OCR uses the native-resolution crop before maxWidth scaling; grid is ignored during
-transcription so grid labels cannot be mistaken for content. There is no separate
-window_read tool. Referencing an earlier screenshotId still captures a fresh image.
+
+## API 0.4
+
+This replaces the coordinate/screenshotId API. All inputs reject unknown fields.
+`window_screenshot`, `window_info`, `window_fullscreen`, `window_interact`, and
+`cursor_position` are no longer exposed. No public input accepts coordinates,
+rectangles, selectors, or JavaScript.
+
+| Tool | Arguments | Result |
+|---|---|---|
+| `window_list` | none | Window IDs (strings) and titles |
+| `window_observe` | `windowId, filter?, limit?` | DOM followed by OCR targets; native apps use OCR |
+| `browser_page_find` | `windowId, filter, fields?, scope?, offset?, limit?` | Paginated DOM targets, including offscreen results |
+| `browser_screenshot` | `windowId, scope?` | Image ID, coverage, truncation |
+| `image_crop` | `observationId, target, context?` | Server-selected target crop image ID |
+| `describe_image` | `image, prompt` | Liquid text, configured model alias, elapsed milliseconds, truncation |
+| `decide` | `question, image?, system_prompt?` | H2O typed answer, configured model alias, elapsed milliseconds |
+| `window_click` | `observationId, target, button?, count?` | Native single/double click and fresh observation |
+| `window_type` | `observationId, target, text, mode?` | Focus-verified DOM typing and fresh observation |
+| `window_scroll` | `windowId, target?, within?, direction?, amount?` | DOM reveal or native wheel input, then observation |
+| `window_key` | `windowId, keys, focusTarget?` | Ordered key chords and fresh observation |
+
+`target` is **either** `{id: 3}` **or** `{label: "Search"}`. Labels must be exact
+and unique within the observation. Scroll `target`/`within` and key `focusTarget`
+are full `{observationId, target}` references belonging to the specified window.
+`image` is either `{imageId}` or `{observationId, target}` for an automatic crop.
+Observation/capture/crop results include MCP image content. Text-only clients can
+strip image blocks and use the target list or the description/decision tools.
+Image paths and geometry stay internal.
 
 ```js
-window_screenshot({windowId: 123, transcribe: true})
-window_click({screenshotId: "returned-id", targetId: "t12"})
-// Or click a field and type in sequence:
-window_interact({screenshotId: "returned-id", targetId: "t12", text: "hello"})
+window_list({})
+window_observe({windowId: "16777220", filter: "Search"})
+window_type({observationId: "returned-id", target: {id: 3}, text: "pretzels"})
+// Use the new observation after every action.
+window_key({windowId: "16777220", keys: ["Enter"]})
+browser_page_find({windowId: "16777220", filter: "pretzel",
+  fields: ["alt", "accessible_name"], scope: "loaded_document", limit: 20})
+window_click({observationId: "search-result-id", target: {id: 12}})
 ```
 
-Each read invalidates older observations for that window. Target IDs are scoped to
-their screenshotId; actions accept targetId OR x,y. OCR-based actions return fresh
-OCR text too. Use `window_screenshot` explicitly for images and visual targeting.
+Defaults: observation limit 50 (max 300), page search viewport scope, screenshot
+viewport scope, single left click, typing replacement, tight crop, small downward
+scroll. `mode: "append"` inserts at the caret after focusing the target.
+`keys` is an ordered array, such as `["Ctrl+l", "Escape"]`.
+`amount: "page"` sends ten wheel ticks, not an exact viewport distance.
 
-Before a targetId click, the server captures again and compares pixels around the
-text region. Changed pixels reject the click. This conservative check can reject
-animations/cursor overlap; it cannot establish semantic identity, detect every
-change elsewhere on the page, or prevent a change after checking. OCR text bounds
-are not guaranteed clickable controls. Merged labels, duplicate labels, and icons
-can require visual inspection. Extracted screen content is untrusted data.
+Decision questions are `{type:"boolean",prompt}`, `{type:"choice",prompt,
+options:[{id,label},...]}`, or `{type:"score",prompt,levels:[...]}`. Descriptions
+and probabilities can be wrong and never generate actionable targets.
+Model names in results identify the configured provider alias, not a verified
+weight-file identity. Timing includes the wrapper/provider round trip.
 
-### OCR installation
+## Target validation and limits
 
-```sh
-uv venv --python 3.12 .venv-ocr
-uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt paddlepaddle==3.3.1
-```
+Observations expire after 120 seconds from capture and after a new observation or
+action on that window. IDs are scoped to an observation. Requests execute in
+received order across all windows. Search pagination uses `nextOffset`, which
+counts matching elements skipped; each page has a new observation ID. The loaded
+DOM can change between pages, so pagination is not a frozen document snapshot.
 
-The MCP is a client of the operator-managed PaddleOCR service at
-`http://127.0.0.1:1239` (`GET /health`, `POST /ocr`). It never starts, stops, or
-restarts that GPU service. If the service is absent/unhealthy, it uses a persistent
-local **CPU-only** worker; CUDA is hidden from that subprocess. A running service's
-inference/busy errors are surfaced, rather than silently replayed on CPU.
+DOM targets are bound to a browser tab, document, element reference and identifying
+attributes. Hidden elements are excluded. Offscreen DOM targets scroll into view
+before clicks; the server checks current geometry, enabled state, layout stability
+and hit testing, including after cursor travel. Covered targets have no click/type
+actions. Use the updated mcp-zen active-tab API for this adapter.
 
-On this machine, Mari's AI activity manages the service:
+Typing verifies that the intended editable DOM element owns focus before sending
+text. OCR alone cannot prove field focus: OCR typing and OCR `focusTarget` are
+rejected. Native applications retain OCR clicks, wheel input and key chords.
+OCR clicks compare the target's captured pixels immediately before input; OCR
+labels are not guaranteed controls. Browser DOM mapping uses mcp-zen’s actual current tab, verifies its title against
+the X11 window, and checks geometry. Duplicate titles in background tabs are fine. Unsupported pages,
+CSP restrictions, shadow roots and embedded frames can limit DOM discovery;
+`window_observe` reports the failure and tries OCR.
 
-- `o`: `~/inference.mjs paddleocr` — launch/warm the GPU model on :1239.
-- `k`: `~/inference.mjs kill-all` — stop text, System One, and OCR slots.
-- `~/inference.mjs kill-ocr`: stop only OCR; the text model remains running.
-- `~/inference.mjs ocr-last`: relaunch the last OCR preset.
+DOM discovery is bounded to 10,000 candidate elements in the top-level document.
+Names/roles are approximations from DOM attributes, not a complete accessibility
+tree. Full-page captures cover loaded content, not unloaded/virtualized products.
+Captures exceeding 20 megapixels or 10 MiB are rejected; they are not silently
+truncated. Cropping an offscreen target never implicitly scrolls: reveal explicitly,
+then use its new observation. Image IDs expire after an hour or cache eviction.
 
-OCR has independent `ocr.lock` / `ocr.log` files in `~/.cache/inference`.
-The launcher owns the monitor and service process group; its stop path escalates
-TERM to KILL if needed. No client reconnect or MCP restart relaunches the GPU model.
-Closing MCP only stops its private CPU fallback. First use may download model
-weights; image data stays on the local machine.
-
-Install the GPU runtime instead of the CPU package for the managed service:
-
-```sh
-uv pip uninstall --python .venv-ocr/bin/python paddlepaddle
-UV_HTTP_TIMEOUT=600 uv pip install --python .venv-ocr/bin/python paddlepaddle-gpu==3.3.0 --index https://www.paddlepaddle.org.cn/packages/stable/cu129/ --index https://pypi.org/simple --index-strategy unsafe-best-match
-# Standalone operator launch (normally use the inference preset instead):
-.venv-ocr/bin/python scripts/ocr-server.py --port 1239 --device gpu:0
-```
-
-The GPU runtime also supports the CPU fallback. `CUA_OCR_PYTHON` selects the
-fallback executable (default `.venv-ocr/bin/python`); the MCP always forces its
-fallback to CPU regardless of `CUA_OCR_DEVICE`. CPU oneDNN is disabled because of
-an observed backend error. This fallback took 42–51 seconds on the dense 1926×1537
-fixture. The RTX 5090 took 0.67–1.34 seconds warm (median 0.97), with a 14.08-second
-first inference plus 3.84-second initialization. Sample process VRAM was 1.8 GiB.
-
-Requests time out after 180 seconds. Screenshot expiry is 120 seconds from capture,
-including OCR processing. Existing visual tools work even when OCR is unavailable.
-Restart MCP after updating its code/environment.
-
-## Screenshot coordinates
-
-Capture first. Pass the returned `screenshotId` and coordinates in the **returned
-image** to actions. Do not add desktop offsets, subtract browser chrome, or use
-window-manager geometry. The server maps image coordinates through any crop/scale.
-This replaces the old direct client-coordinate action API.
-
-The default image width is at most 1280 pixels (`maxWidth`: 320–2000). To examine
-a region, call `window_screenshot` with a screenshotId and
-`crop: {x, y, width, height}` in that image's pixels; optionally use `grid: 100`.
-Grid is an integer spacing in output-image pixels: 50 draws major lines every
-50 pixels, 100 every 100; omitted or 0 disables it. Booleans are no longer accepted.
-The cropped image has a new screenshotId and local coordinates starting at (0,0).
-
-Actions invalidate older screenshots for that window. IDs expire after 120 seconds;
-changed window geometry/title is rejected. These checks do not detect every page
-content change. Use the latest image and inspect the expected result.
-
-Every successful action reports `input_sent`, not verified application success,
-and returns a fresh image. If observation fails after input was sent, the error
-states that input already occurred so an agent does not blindly replay it.
-`window_interact` accepts optional `x`, `y`, `text`, `replace`, and `keys` along with
-`screenshotId`. Its steps run in that order. `replace` means Ctrl+a before typing
-and should only be used after targeting a text field.
-
-The blue cursor follows curved paths and remains at its last target during typing,
-turning amber while typing. After three minutes without movement it disappears;
-moving it again makes it visible. Screenshots and typing do not reset that timer. Screenshots include the actual overlay; its metadata
-coordinates are image-relative. The cursor is not the text caret.
-
-## Skill
-
-[SKILL.md](SKILL.md) provides the agent workflow and recovery rules. Register it
-with the user's skills CLI configuration:
-
-```yaml
-skills:
-  computer-use: /workspace/mcp-computer-use/SKILL.md
-```
-
-Then `skills computer-use` prints it. Reload MCP tools after updating the server.
-Local PaddleOCR text extraction is available through `window_screenshot({transcribe: true})`. Accessibility
-trees and separate control/icon detection are not implemented.
+`input_sent` reports delivery, not application success. `focus_verified` proves only
+the checked focus state. Inspect the returned observation for the intended result.
+Errors after scrolling/partial input say so; never replay blindly. Stale-target
+rejections attempt to return a fresh observation. A page can still change between
+the final check and native input; these checks are not an atomic browser transaction.
 
 ## Checks
 
 ```sh
-bun test test/*.test.mjs
+node --test test/*.test.mjs
 cargo test --manifest-path overlay/Cargo.toml
 cargo clippy --manifest-path overlay/Cargo.toml -- -D warnings
 ```
 
-Opt-in desktop tests are documented in [overlay/README.md](overlay/README.md).
-[PLAN-agent-cursor-overlay.md](PLAN-agent-cursor-overlay.md) is the historical
-planning draft; the READMEs describe the implemented behavior.
+[SKILL.md](SKILL.md) describes the agent workflow. The interface design and earlier
+vision experiments remain in [docs/VISION_PLAN2.md](docs/VISION_PLAN2.md).

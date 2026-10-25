@@ -14,7 +14,7 @@ test('running service errors are not silently retried on CPU',async()=>{
  const ocr=createOcr({python:'/must-not-launch',fetchImpl:async url=>url.endsWith('/health')?{ok:true}:{ok:false,status:503,json:async()=>({error:'busy'})}});
  await assert.rejects(ocr.read({bytes:Buffer.from('image')}),/busy/);await ocr.stop();
 });
-test('absent service uses configured local CPU worker and reports missing runtime',async()=>{
+test('absent service reports unavailable without loading a CPU worker',async()=>{
  const ocr=createOcr({python:'/nonexistent/ocr-python',fetchImpl:async()=>{throw new Error('connection refused');}});
  await assert.rejects(ocr.read({bytes:Buffer.from('image')}),/OCR unavailable/);await ocr.stop();
 });

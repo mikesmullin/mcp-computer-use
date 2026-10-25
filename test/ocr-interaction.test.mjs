@@ -58,6 +58,9 @@ test('transcription crops in native pixels, ignores grid, and target clicks reta
 test('transcribe defaults off even when referencing an OCR observation',async()=>{
  const {ui}=setup();const a=await ui.screenshot({windowId:7,transcribe:true});
  const b=await ui.screenshot({screenshotId:a.structuredContent.screenshotId});
- assert.deepEqual(b.content.map(c=>c.type),['text','image']);
+ assert.deepEqual(b.content.map(c=>c.type),['text']);
+ assert.match(b.structuredContent.path,/^\//);
+ const image=await ui.screenshot({screenshotId:b.structuredContent.screenshotId,includeImage:true});
+ assert.deepEqual(image.content.map(c=>c.type),['text','image']);
  await assert.rejects(ui.screenshot({windowId:7,query:'Search'}),/requires transcribe/);
 });
